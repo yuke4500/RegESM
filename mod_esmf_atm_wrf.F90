@@ -2268,6 +2268,8 @@
       real(ESMF_KIND_R8), pointer :: ptr3d(:,:,:)
       real(ESMF_KIND_R8), allocatable :: varout(:,:,:)
       integer(ESMF_KIND_I8) :: tstep
+      real(ESMF_KIND_R8), save, allocatable :: ptr2d_stored(:,:)
+      logical, save :: firsttime = .true.
 !
       type(ESMF_VM) :: vm
       type(ESMF_Clock) :: clock
@@ -2449,23 +2451,37 @@
           end do
         end do
       case ('prec')
-        do m = ips, ipe 
+        ! convert mm to mm/s
+        do m = ips, ipe
           do n = jps, jpe
-            ptr2d(m,n) = (head_grid%RAINCV(m,n)+head_grid%RAINNCV(m,n))/&
-                         head_grid%DT 
+            ptr2d(m,n) = (head_grid%RAINC(m,n)+                         &
+                         head_grid%RAINNC(m,n)+   &
+                         head_grid%RAINSH(m,n))/                        &
+                         ((24.0/connectors(Iatmos,Iocean)%divDT)*60*60)
           end do
         end do
+        ! store initial data of accumulated prec. in case of restart
+        if (.not. allocated(ptr2d_stored)) then
+          allocate(ptr2d_stored(ips:ipe,jps:jpe))
+        end if
+        ptr2d_stored(ips:ipe,jps:jpe) = ZERO_R8
+        if (firsttime .and. restarted) then
+          ptr2d_stored(ips:ipe,jps:jpe) = ptr2d(ips:ipe,jps:jpe)
+          firsttime = .false.
+        end if
+        ptr2d(ips:ipe,jps:jpe) = ptr2d(ips:ipe,jps:jpe)-                &
+                                 ptr2d_stored(ips:ipe,jps:jpe)
       case ('wndu')
         do m = ips, ipe 
           do n = jps, jpe
-             ptr2d(m,n) = head_grid%U10(m,n)*head_grid%cosa(m,n)-        &
+             ptr2d(m,n) = head_grid%U10(m,n)*head_grid%cosa(m,n)-       &
                           head_grid%V10(m,n)*head_grid%sina(m,n)
           end do
         end do
       case ('wndv') 
         do m = ips, ipe 
           do n = jps, jpe
-             ptr2d(m,n) = head_grid%V10(m,n)*head_grid%cosa(m,n)+        &
+             ptr2d(m,n) = head_grid%V10(m,n)*head_grid%cosa(m,n)+       &
                           head_grid%U10(m,n)*head_grid%sina(m,n)
           end do
         end do
@@ -2552,8 +2568,9 @@
       case ('nflx') 
         do m = ips, ipe
           do n = jps, jpe
-            ptr2d(m,n) = head_grid%GSW(m,n)-                            &
-                         (head_grid%GLW(m,n)-(STBOLT*head_grid%EMISS(m,n)*head_grid%SST(m,n)**4))-&
+            ptr2d(m,n) = head_grid%GSW(m,n)+                            &
+                         (head_grid%EMISS(m,n)*head_grid%GLW(m,n)-      &
+                         (STBOLT*head_grid%EMISS(m,n)*head_grid%SST(m,n)**4))-&
                          head_grid%LH(m,n)-                             &
                          head_grid%HFX(m,n) 
           end do
@@ -2566,8 +2583,10 @@
           end do
         end do
       case ('sflx')
+        ! this works fine when no adaptive time step is used in WRF, otherwise is better using E-P
         do m = ips, ipe 
           do n = jps, jpe
+            ! http://forum.wrfforum.com/viewtopic.php?f=32&t=5580
             ptr2d(m,n) = head_grid%QFX(m,n)-                            &
                         (head_grid%RAINCV(m,n)+head_grid%RAINNCV(m,n))/ &
                          head_grid%DT
