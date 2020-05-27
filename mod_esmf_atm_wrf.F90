@@ -2463,11 +2463,15 @@
         ! store initial data of accumulated prec. in case of restart
         if (.not. allocated(ptr2d_stored)) then
           allocate(ptr2d_stored(ips:ipe,jps:jpe))
+          ptr2d_stored(ips:ipe,jps:jpe) = ZERO_R8
         end if
-        ptr2d_stored(ips:ipe,jps:jpe) = ZERO_R8
         if (firsttime .and. restarted) then
           ptr2d_stored(ips:ipe,jps:jpe) = ptr2d(ips:ipe,jps:jpe)
           firsttime = .false.
+          write(*,fmt="(A,I5.5,2F15.8)") "Stored Accum. Precip. = ",    &
+                localPet,                                               &
+                minval(ptr2d_stored(ips:ipe,jps:jpe)),                  &
+                maxval(ptr2d_stored(ips:ipe,jps:jpe))
         end if
         ptr2d(ips:ipe,jps:jpe) = ptr2d(ips:ipe,jps:jpe)-                &
                                  ptr2d_stored(ips:ipe,jps:jpe)
